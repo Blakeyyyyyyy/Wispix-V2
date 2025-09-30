@@ -1,0 +1,138 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  passwordHash String? @map("password_hash")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  automations Automation[]
+  executions  Execution[]
+  draftPlans  DraftPlan[]
+}
+
+model Automation {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  status      String   @default("active")
+  // isActive field removed due to database schema issues
+  config      Json?
+  runLog      Json?
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  executions Execution[]
+  workflowJson Json?
+  agentSpec   Json?
+  version     String?
+}
+
+model Execution {
+  id           String   @id @default(uuid())
+  automationId String
+  status       String   @default("pending")
+  result       Json?
+  logs         Json?
+  error        String?
+  progress     Json?
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userId String
+  user   User @relation(fields: [userId], references: [id])
+
+  automation Automation @relation(fields: [automationId], references: [id])
+  steps      ExecutionStep[]
+}
+
+model ExecutionStep {
+  id          String   @id @default(uuid())
+  executionId String
+  stepId      String
+  name        String?
+  idemKey     String?
+  input       Json?
+  output      Json?
+  error       String?
+  status      String
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  attempt     Int      @default(1)
+  meta        String?
+
+  execution Execution @relation(fields: [executionId], references: [id])
+
+  @@index([executionId])
+}
+
+model ApiDoc {
+  id        String   @id @default(uuid())
+  provider  String
+  version   String
+  rawMd     String   @map("raw_md")
+  sourceUrl String?  @map("source_url")
+  fetchedAt DateTime @map("fetched_at") @default(now())
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @updatedAt
+
+  chunks ApiChunk[]
+
+  @@unique([provider, version])
+  @@map("api_docs")
+}
+
+model ApiChunk {
+  id        String   @id @default(uuid())
+  apiDocId  String   @map("api_doc_id")
+  hash      String   @unique
+  contentMd String   @map("content_md")
+  embedding Float[]
+  tokenCount Int?    @map("token_count")
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @updatedAt
+
+  apiDoc ApiDoc @relation(fields: [apiDocId], references: [id])
+
+  @@map("api_chunks")
+}
+
+model DraftPlan {
+  id        String   @id @default(uuid())
+  userId    String
+  json      Json
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model GmailTokens {
+  id           String    @id @default("default")
+  accessToken  String    @map("access_token")
+  refreshToken String?   @map("refresh_token")
+  expiryDate   DateTime? @map("expiry_date")
+  scope        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("gmail_tokens")
+}

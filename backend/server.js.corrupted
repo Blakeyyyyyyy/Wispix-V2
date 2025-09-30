@@ -1,0 +1,687 @@
+const express = require('express');
+const { SessionManager } = require("./src/session/session-manager");
+const cors = require('cors');
+const Anthropic = require('@anthropic-ai/sdk');
+const { v4: uuidv4 } = require('uuid');
+const { AgentBuilder } = require('./src/agents/agent-builder.js');
+const { AgentDeployer } = require('./src/deployment/agent-deployer.js');
+
+require('dotenv').config();
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Initialize Claude
+// Initialize session manager for context persistence
+const sessionManager = new SessionManager();
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY,
+});
+
+// Store active employees (in production: use database)
+const activeEmployees = new Map();
+
+// Health check
+app.get('/', (req, res) => {
+  res.json({ 
+
+// Get session context endpoint
+    employees: activeEmployees.size,
+    claude: 'Connected'
+  });
+});
+
+// Main endpoint - Claude-powered employee creation
+app.post('/api/create-employee', async (req, res) => {
+  const { message } = req.body;
+  
+  // Set up SSE for streaming
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  try {
+    // Phase 1: Send thinking status
+    res.write(`data: ${JSON.stringify({ 
+      type: 'thinking',
+      content: 'Analyzing your requirements...'
+    })}\n\n`);
+
+    // Phase 2: Let Claude analyze the request
+    const claudeResponse = await anthropic.messages.create({
+      model: 'claude-3-opus-20240229', // or 'claude-3-5-sonnet-20241022' for cheaper/faster
+      max_tokens: 2000,
+      temperature: 0.7,
+      system: `You are Wispix AI, an intelligent AI employee builder. When users describe what they need, you:
+
+1. Understand their requirements deeply
+2. Design the perfect AI employee for their needs
+3. Explain what you're building in a friendly, professional way
+
+Currently, you can only build Email Managers. For ANY request, find a way to frame it as email management.
+
+Your response should be structured but conversational. Include:
+- What you understand they need
+- What capabilities the AI employee will have
+- How it will help them
+
+Be concise but thorough. Don't ask questions - just build based on what they said.
+If they ask for something unrelated to email, creatively connect it to email management.`,
+      messages: [{
+        role: 'user',
+        content: message
+      }]
+    });
+
+    // Phase 3: Stream Claude's analysis
+    const analysisContent = claudeResponse.content[0].text;
+    res.write(`data: ${JSON.stringify({ 
+      type: 'analysis',
+      content: analysisContent
+    })}\n\n`);
+
+    // Phase 4: Build the employee
+    const employeeId = uuidv4();
+    const employeeName = 'Emma'; // Could randomize this
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'building',
+      content: 'Creating your AI Employee...'
+    })}\n\n`);
+
+    // Simulate building steps (in production: actual deployment steps)
+    const buildingSteps = [
+      'Initializing AI core systems...',
+      'Configuring email integration...',
+      'Setting up classification engine...',
+      'Training on your requirements...',
+      'Deploying to cloud infrastructure...',
+      'Activating 24/7 monitoring...'
+    ];
+
+    for (const step of buildingSteps) {
+      res.write(`data: ${JSON.stringify({ 
+        type: 'building_step',
+        content: step
+      })}\n\n`);
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+
+    // Phase 5: "Deploy" (configure existing Render instance)
+    const employee = {
+      id: employeeId,
+      name: employeeName,
+      type: 'Email Manager',
+      status: 'active',
+      url: `https://growth-ai-email-1.onrender.com?uid=${employeeId}`,
+      capabilities: [
+        'Email Classification',
+        'Lead Detection', 
+        'Smart Drafting',
+        '24/7 Monitoring',
+        'Priority Filtering',
+        'Auto-Response'
+      ],
+      createdAt: new Date().toISOString()
+    };
+
+    activeEmployees.set(employeeId, employee);
+
+    // Phase 6: Send completion
+    res.write(`data: ${JSON.stringify({ 
+      type: 'complete',
+      employee: employee,
+      message: `✅ ${employeeName} is now active and monitoring your inbox!`
+    })}\n\n`);
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+
+  } catch (error) {
+    console.error('Error:', error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error',
+      content: 'Sorry, I encountered an error. Please try again.'
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// Get employee status
+app.get('/api/employee/:id', (req, res) => {
+  const employee = activeEmployees.get(req.params.id);
+  if (!employee) {
+    return res.status(404).json({ error: 'Employee not found' });
+  }
+  res.json(employee);
+});
+
+// New streaming endpoint for agent building using Vibe-inspired streaming
+app.post('/api/build-agent', async (req, res) => {
+  const { message, sessionId } = req.body;
+  
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*'
+  });
+  
+  try {
+    // Step 1: Analyze with Sonnet (cheap & fast)
+    res.write(`data: ${JSON.stringify({ 
+      type: 'analyzing', 
+      message: 'Understanding your requirements...',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    const analysis = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: message }],
+      system: 'Analyze what type of AI agent the user needs. Be concise and identify the core requirements.'
+    });
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'analyzing', 
+      message: analysis.content[0].text,
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    // Step 2: Generate plan with Opus (smart)
+    res.write(`data: ${JSON.stringify({ 
+      type: 'planning', 
+      message: 'Creating detailed agent blueprint...',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    const plan = await anthropic.messages.create({
+      model: 'claude-3-opus-20240229',
+      max_tokens: 2000,
+      messages: [{ 
+        role: 'user', 
+        content: `Based on this analysis: ${analysis.content[0].text}\n\nGenerate a detailed agent configuration plan. Include capabilities, integrations needed, and configuration details.` 
+      }],
+      system: 'Create a comprehensive plan for building this AI agent. Include capabilities, integrations needed, and configuration details. Be specific about what needs to be built.'
+    });
+    
+    // Send plan and wait for approval (handled client-side)
+    res.write(`data: ${JSON.stringify({ 
+      type: 'plan-ready',
+      plan: plan.content[0].text,
+      requiresApproval: true,
+      estimatedTime: '5-10 minutes',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    // Step 3: Show plan ready for approval
+    res.write(`data: ${JSON.stringify({ 
+      type: 'complete', 
+      message: 'Plan ready for approval',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    res.write('data: [DONE]\n\n');
+    res.end();
+    
+  } catch (error) {
+    console.error('Error:', error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error',
+      message: error.message || 'Unknown error occurred',
+      code: 'BUILD_ERROR',
+      retryable: true,
+      timestamp: Date.now()
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// Enhanced streaming endpoint using Vibe-inspired architecture
+app.post('/api/build-agent-enhanced', async (req, res) => {
+  const { message, sessionId } = req.body;
+  
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*'
+  });
+  
+  try {
+    // Step 1: Analyze with Sonnet (cheap & fast)
+    res.write(`data: ${JSON.stringify({ 
+      type: 'analyzing', 
+      message: 'Understanding your requirements...',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    const analysis = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: message }],
+      system: 'Analyze what type of AI agent the user needs. Be concise and identify the core requirements.'
+    });
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'analyzing', 
+      message: analysis.content[0].text,
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    // Step 2: Generate plan with Opus (smart)
+    res.write(`data: ${JSON.stringify({ 
+      type: 'planning', 
+      message: 'Creating detailed agent blueprint...',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    const plan = await anthropic.messages.create({
+      model: 'claude-3-opus-20240229',
+      max_tokens: 2000,
+      messages: [{ 
+        role: 'user', 
+        content: `Based on this analysis: ${analysis.content[0].text}\n\nGenerate a detailed agent configuration plan. Include capabilities, integrations needed, and configuration details.` 
+      }],
+      system: 'Create a comprehensive plan for building this AI agent. Include capabilities, integrations needed, and configuration details. Be specific about what needs to be built.'
+    });
+    
+    // Send plan and wait for approval (handled client-side)
+    res.write(`data: ${JSON.stringify({ 
+      type: 'plan-ready',
+      plan: plan.content[0].text,
+      requiresApproval: true,
+      estimatedTime: '5-10 minutes',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    // Step 3: Show plan ready for approval
+    res.write(`data: ${JSON.stringify({ 
+      type: 'complete', 
+      message: 'Plan ready for approval',
+      timestamp: Date.now()
+    })}\n\n`);
+    
+    res.write('data: [DONE]\n\n');
+    res.end();
+    
+  } catch (error) {
+    console.error('Error:', error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error',
+      message: error.message || 'Unknown error occurred',
+      code: 'BUILD_ERROR',
+      retryable: true,
+      timestamp: Date.now()
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// Advanced streaming endpoint using Node.js streams (Vibe-inspired)
+app.post('/api/build-agent-streaming', async (req, res) => {
+  const { message, sessionId } = req.body;
+  
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*'
+  });
+  
+  // Function to write streaming data
+  const writeStream = (data) => {
+    const chunk = `data: ${JSON.stringify(data)}\n\n`;
+    res.write(chunk);
+  };
+  
+  try {
+    // Step 1: Analyze with Sonnet (cheap & fast)
+    writeStream({ 
+      type: 'analyzing', 
+      message: 'Understanding your requirements...',
+      timestamp: Date.now()
+    });
+    
+    const analysis = await anthropic.messages.create({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: message }],
+      system: 'Analyze what type of AI agent the user needs. Be concise and identify the core requirements.'
+    });
+    
+    writeStream({ 
+      type: 'analyzing', 
+      message: analysis.content[0].text,
+      timestamp: Date.now()
+    });
+    
+    // Step 2: Generate plan with Opus (smart)
+    writeStream({ 
+      type: 'planning', 
+      message: 'Creating detailed agent blueprint...',
+      timestamp: Date.now()
+    });
+    
+    const plan = await anthropic.messages.create({
+      model: 'claude-3-opus-20240229',
+      max_tokens: 2000,
+      messages: [{ 
+        role: 'user', 
+        content: `Based on this analysis: ${analysis.content[0].text}\n\nGenerate a detailed agent configuration plan. Include capabilities, integrations needed, and configuration details.` 
+      }],
+      system: 'Create a comprehensive plan for building this AI agent. Include capabilities, integrations needed, and configuration details. Be specific about what needs to be built.'
+    });
+    
+    // Send plan and wait for approval (handled client-side)
+    writeStream({ 
+      type: 'plan-ready',
+      plan: plan.content[0].text,
+      requiresApproval: true,
+      estimatedTime: '5-10 minutes',
+      timestamp: Date.now()
+    });
+    
+    // Step 3: Show plan ready for approval
+    writeStream({ 
+      type: 'complete', 
+      message: 'Plan ready for approval',
+      timestamp: Date.now()
+    });
+    
+    // End the stream
+    res.write('data: [DONE]\n\n');
+    res.end();
+    
+  } catch (error) {
+    console.error('Error:', error);
+    writeStream({ 
+      type: 'error',
+      message: error.message || 'Unknown error occurred',
+      code: 'BUILD_ERROR',
+      retryable: true,
+      timestamp: Date.now()
+    });
+    res.end();
+  }
+});
+
+// Smart model routing endpoint with cost optimization
+app.post('/api/build-agent-smart', async (req, res) => {
+  const { message, sessionId } = req.body;
+  
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*'
+  });
+  
+  try {
+    // Create a simple streaming writer for this endpoint
+    const writeStream = (data) => {
+      const chunk = `data: ${JSON.stringify(data)}\n\n`;
+      res.write(chunk);
+    };
+    
+    // Initialize the smart AgentBuilder
+    const builder = new AgentBuilder(sessionManager);
+    
+    // Create a mock writer that works with the existing streaming system
+    const mockWriter = {
+      writeStep: (step) => {
+        writeStream({
+          type: step.type,
+          message: step.message,
+          metadata: step.metadata,
+          timestamp: Date.now()
+        });
+      }
+    };
+    
+    // Build the agent using smart model routing
+    const result = await builder.buildAgent(message, mockWriter);
+    
+    // End the stream
+    res.write('data: [DONE]\n\n');
+    res.end();
+    
+  } catch (error) {
+    console.error('Smart agent build error:', error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error',
+      message: error.message || 'Unknown error occurred',
+      code: 'SMART_BUILD_ERROR',
+      retryable: true,
+      timestamp: Date.now()
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// Agent deployment endpoint with self-testing
+app.post('/api/deploy-agent', async (req, res) => {
+  const { planId, credentials } = req.body;
+  
+  // For MVP: Create a mock plan if none exists
+  const plan = {
+    id: planId || 'mock-plan-123',
+    name: 'AI Email Manager',
+    type: 'Email Management Agent',
+    capabilities: [
+      'Email processing and sorting',
+      'Automated responses',
+      'Task management',
+      'Calendar integration'
+    ],
+    requiredCredentials: ['Gmail API Key', 'Gmail OAuth Token'],
+    estimatedCost: 29.99,
+    configuration: {
+      emailProvider: 'gmail',
+      automationLevel: 'high',
+      responseTemplates: true
+    }
+  };
+  
+  // Set up SSE for deployment progress
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'Access-Control-Allow-Origin': '*'
+  });
+  
+  try {
+    // Create a simple streaming writer for this endpoint
+    const writeStream = (data) => {
+      const chunk = `data: ${JSON.stringify(data)}\n\n`;
+      res.write(chunk);
+    };
+    
+    // Initialize the AgentDeployer
+    const deployer = new AgentDeployer();
+    
+    // Create a mock writer that works with the existing streaming system
+    const mockWriter = {
+      writeStep: (step) => {
+        writeStream({
+          type: step.type,
+          message: step.message,
+          metadata: step.metadata,
+          timestamp: Date.now()
+        });
+      }
+    };
+    
+    // Deploy the agent using the deployer
+    const result = await deployer.deployAgent(plan, credentials, mockWriter);
+    
+    // End the stream
+    res.write('data: [DONE]\n\n');
+    res.end();
+    
+  } catch (error) {
+    console.error('Agent deployment error:', error);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error',
+      message: error.message || 'Unknown error occurred',
+      code: 'DEPLOYMENT_ERROR',
+      retryable: true,
+      timestamp: Date.now()
+    })}\n\n`);
+    res.end();
+
+  }
+  
+  try {
+    // Get full session context
+    const context = sessionManager.getFullContext(sessionId);
+    if (!context) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    
+    // Use AI to answer based on full context (Sonnet for cost efficiency)
+    const answer = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 1000,
+      messages: [{
+        role: "user",
+        content: `Based on this context, answer the user's question: ${question}nnContext: ${JSON.stringify(context, null, 2)}`
+      }],
+      system: "You are an AI assistant helping users understand their AI agent plan. Answer questions clearly and concisely based on the provided context. If the question cannot be answered from the context, say so politely."
+    });
+    
+    // Store Q&A in session for future reference
+    sessionManager.addApprovalQuestion(sessionId, question, answer.content[0].text);
+    
+    // Add to conversation history
+    sessionManager.addConversationMessage(sessionId, {
+      role: "user",
+      content: question,
+      type: "approval_question"
+    });
+    
+    sessionManager.addConversationMessage(sessionId, {
+      role: "assistant",
+      content: answer.content[0].text,
+      type: "approval_answer"
+    });
+    
+    res.json({
+
+// Get session context endpoint
+      answer: answer.content[0].text,
+      context: context,
+      sessionId: sessionId
+    });
+    
+  } catch (error) {
+    console.error("Approval question error:", error);
+    res.status(500).json({
+      error: "Failed to process question",
+      details: error.message
+    });
+  }
+});
+
+const PORT = process.env.PORT || 3001;
+
+// Approval questions endpoint for context-aware Q&A
+app.post("/api/approval-question", async (req, res) => {
+  const { sessionId, question } = req.body;
+  
+  if (!sessionId || !question) {
+    return res.status(400).json({ error: "Session ID and question are required" });
+  }
+  
+  try {
+    // Get full session context
+    const context = sessionManager.getFullContext(sessionId);
+    if (!context) {
+      return res.status(404).json({ error: "Session not found" });
+    }
+    
+    // Use AI to answer based on full context (Sonnet for cost efficiency)
+    const answer = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-20241022",
+      max_tokens: 1000,
+      messages: [{
+        role: "user",
+        content: `Based on this context, answer the user's question: ${question}\n\nContext: ${JSON.stringify(context, null, 2)}`
+      }],
+      system: "You are an AI assistant helping users understand their AI agent plan. Answer questions clearly and concisely based on the provided context. If the question cannot be answered from the context, say so politely."
+    });
+    
+    // Store Q&A in session for future reference
+    sessionManager.addApprovalQuestion(sessionId, question, answer.content[0].text);
+    
+    // Add to conversation history
+    sessionManager.addConversationMessage(sessionId, {
+      role: "user",
+      content: question,
+      type: "approval_question"
+    });
+    
+    sessionManager.addConversationMessage(sessionId, {
+      role: "assistant",
+      content: answer.content[0].text,
+      type: "approval_answer"
+    });
+    
+    res.json({
+      answer: answer.content[0].text,
+      context: context,
+      sessionId: sessionId
+    });
+    
+  } catch (error) {
+    console.error("Approval question error:", error);
+    res.status(500).json({
+      error: "Failed to process question",
+      details: error.message
+    });
+  }
+});
+    res.json({
+      answer: answer.content[0].text,
+      context: context,
+      sessionId: sessionId
+    });
+    
+  } catch (error) {
+    console.error("Approval question error:", error);
+    res.status(500).json({
+      error: "Failed to process question",
+      details: error.message
+    });
+  }
+});
+
+// Get session context endpoint
+app.get("/api/session/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+  const context = sessionManager.getFullContext(sessionId);
+  
+  if (!context) {
+    return res.status(404).json({ error: "Session not found" });
+  }
+  
+  res.json(context);
+});
+app.listen(PORT, () => {
+  console.log(`🚀 Wispix Backend with Claude running on port ${PORT}`);
+  console.log(`📊 Claude API: ${process.env.ANTHROPIC_API_KEY ? 'Connected' : 'Missing API Key!'}`);
+});

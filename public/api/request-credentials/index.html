@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Credential Request API</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <script>
+        // Get environment variables from the main app
+        // Get Supabase config from parent window or use fallback
+        const getSupabaseConfig = () => {
+            try {
+                // Try to get from parent window first
+                if (window.parent && window.parent !== window && window.parent.SUPABASE_CONFIG) {
+                    return window.parent.SUPABASE_CONFIG;
+                }
+                // Fallback to current window
+                if (window.SUPABASE_CONFIG) {
+                    return window.SUPABASE_CONFIG;
+                }
+                // Last resort - try to get from localStorage (set by main app)
+                const stored = localStorage.getItem('supabase_config');
+                if (stored) {
+                    return JSON.parse(stored);
+                }
+            } catch (e) {
+                console.warn('Could not get Supabase config:', e);
+            }
+            return null;
+        };
+        
+        const config = getSupabaseConfig();
+        const SUPABASE_URL = config?.url;
+        const SUPABASE_ANON_KEY = config?.anonKey;
+
+        async function handleRequest() {
+            try {
+                // Check if this is a POST request simulation
+                const urlParams = new URLSearchParams(window.location.search);
+                const method = urlParams.get('method') || 'GET';
+                
+                if (method === 'POST') {
+                    // Get POST data from URL parameter (base64 encoded)
+                    const postData = urlParams.get('data');
+                    if (!postData) {
+                        throw new Error('No POST data provided');
+                    }
+                    
+                    const requestData = JSON.parse(atob(postData));
+                    const result = await processCredentialRequest(requestData);
+                    
+                    document.body.innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                    return;
+                }
+                
+                // Handle GET request
+                const thread_id = urlParams.get('thread_id');
+                const platform = urlParams.get('platform');
+                const requested_credentials = urlParams.get('requested_credentials');
+                const credential_name = urlParams.get('credential_name');
+                
+                if (!thread_id || !platform || !requested_credentials) {
+                    throw new Error('Missing required parameters: thread_id, platform, requested_credentials');
+                }
+                
+                const requestData = {
+                    thread_id,
+                    platform,
+                    requested_credentials: requested_credentials.split(','),
+                    credential_name: credential_name || platform.toLowerCase()
+                };
+                
+                const result = await processCredentialRequest(requestData);
+                document.body.innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                
+            } catch (error) {
+                document.body.innerHTML = `<pre>${JSON.stringify({
+                    success: false,
+                    message: error.message
+                }, null, 2)}</pre>`;
+            }
+        }
+        
+        async function processCredentialRequest(requestData) {
+            // Validate required fields
+            if (!requestData.thread_id || !requestData.platform || !requestData.requested_credentials) {
+                throw new Error('Missing required fields: thread_id, platform, requested_credentials');
+            }
+            
+            // Create Supabase client
+            const { createClient } = await import('https://cdn.skypack.dev/@supabase/supabase-js@2');
+            const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            
+            // Get user_id from thread if not provided
+            let userId = requestData.user_id;
+            if (!userId) {
+                const { data: threadData, error: threadError } = await supabase
+                    .from('automation_threads')
+                    .select('user_id')
+                    .eq('id', requestData.thread_id)
+                    .single();
+                
+                if (threadError || !threadData) {
+                    throw new Error(`Thread not found: ${requestData.thread_id}`);
+                }
+                
+                userId = threadData.user_id;
+            }
+            
+            // Store the credential request in chat messages
+            const { data, error } = await supabase
+                .from('chat_messages')
+                .insert([
+                    {
+                        thread_id: requestData.thread_id,
+                        user_id: userId,
+                        content: JSON.stringify({
+                            type: 'credential_request',
+                            platform: requestData.platform,
+                            requested_credentials: requestData.requested_credentials,
+                            credential_name: requestData.credential_name || requestData.platform.toLowerCase()
+                        }),
+                        sender_type: 'agent1',
+                    },
+                ])
+                .select()
+                .single();
+            
+            if (error) {
+                throw new Error(`Database error: ${error.message}`);
+            }
+            
+            return {
+                success: true,
+                message: 'Credential request created successfully - user will see form in chat',
+                credential_id: data.id,
+                thread_id: requestData.thread_id,
+                platform: requestData.platform,
+                requested_credentials: requestData.requested_credentials,
+                user_id: userId,
+                timestamp: new Date().toISOString()
+            };
+        }
+        
+        // Run when page loads
+        document.addEventListener('DOMContentLoaded', handleRequest);
+    </script>
+    
+    <div id="loading">
+        <h1>Processing Credential Request...</h1>
+        <p>Please wait while we process your request.</p>
+    </div>
+</body>
+</html>

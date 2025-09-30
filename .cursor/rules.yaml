@@ -1,0 +1,47 @@
+# .cursor/rules.yaml — Wispix
+meta:
+  description: Guardrails for Wispix (Node/TS). Keep diffs minimal, protect env, bias to core entry points.
+
+rules:
+# 1) Ignore generated / heavy artefacts
+- id: ignore-build
+  pattern: ["**/dist/**","**/build/**","**/.next/**","**/.turbo/**","**/coverage/**","**/*.log"]
+  exclude: true
+
+- id: ignore-assets
+  pattern: ["**/*.{png,jpg,jpeg,gif,svg,mp4,webm,ico}","**/*.pdf"]
+  exclude: true
+
+# 2) Secrets / configs are read-only
+- id: readonly-env
+  match: ["**/.env*","**/supabase/**","**/prisma/**"]
+  readonly: true
+
+# 3) Token budgets by area
+- id: backend-core
+  pattern: ["backend/src/**"]
+  maxTokens: 9000
+
+- id: frontend-core
+  pattern: ["frontend/src/**"]
+  maxTokens: 6000
+
+- id: tests
+  pattern: ["**/*.test.{ts,tsx}","**/__tests__/**"]
+  weight: 0.6
+
+# 4) Entry points (speeds up understanding)
+- id: entrypoints
+  entryPoints:
+    - "backend/src/index.ts"
+    - "backend/src/services/automationEngine.ts"
+    - "backend/src/routes/plan.ts"
+    - "backend/src/routes/automation.deploy.ts"
+    - "frontend/src/index.tsx"
+    - "frontend/src/App.tsx"
+  comment: Start here. Do not reorganize modules.
+
+# 5) Change-scope hints
+- id: safe-edits
+  comment: >
+    Prefer additive diffs; do not rename/move files or change public exports without explicit instruction.

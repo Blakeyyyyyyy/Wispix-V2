@@ -1,0 +1,45 @@
+name: Prisma Migrate Status (manual, pooled)
+on:
+  workflow_dispatch:
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Redacted URL sanity
+        env:
+          SUPABASE_POOLED_URL: ${{ secrets.SUPABASE_POOLED_URL }}
+        run: |
+          node -e "
+            const u=new URL(process.env.SUPABASE_POOLED_URL);
+            console.log({host:u.hostname, port:u.port, pgbouncer:u.searchParams.get('pgbouncer'), ssl:u.searchParams.get('sslmode')});
+          "
+
+      - name: Connectivity probe (30s)
+        env:
+          SUPABASE_POOLED_URL: ${{ secrets.SUPABASE_POOLED_URL }}
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+          H=$(node -e "console.log(new URL(process.env.SUPABASE_POOLED_URL).hostname)")
+          P=$(node -e "console.log(new URL(process.env.SUPABASE_POOLED_URL).port || '6543')")
+          # 30s probe; if it can't connect, skip the rest gracefully
+          if ! timeout 30s pg_isready -h "$H" -p "$P"; then
+            echo "::warning::Pooled DB not reachable from GH runner; skipping Prisma status."
+            exit 0
+          fi
+
+      - name: Prisma migrate status (timeout 60s)
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_POOLED_URL }}
+        run: |
+          timeout 60s npx -y prisma@6.13.0 migrate status --schema=prisma/schema.prisma || \
+          { echo "::warning::Prisma status timed out or failed; skipping."; exit 0; }

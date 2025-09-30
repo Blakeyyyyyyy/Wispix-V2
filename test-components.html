@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Component Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Wispix Component Test</h1>
+    
+    <div class="test-section">
+        <h2>API Connection Test</h2>
+        <button onclick="testAPI()">Test Backend Connection</button>
+        <button onclick="testAuth()">Test Authentication</button>
+        <button onclick="testClaude()">Test Claude AI</button>
+        <div id="api-result"></div>
+    </div>
+
+    <script>
+        async function testAPI() {
+            try {
+                const response = await fetch('https://wispix-ai-production.up.railway.app/health');
+                const data = await response.text();
+                document.getElementById('api-result').innerHTML = `<p>✅ Backend Health: ${data}</p>`;
+            } catch (error) {
+                document.getElementById('api-result').innerHTML = `<p>❌ Backend Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testAuth() {
+            try {
+                const response = await fetch('https://wispix-ai-production.up.railway.app/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'test@wispix.com',
+                        password: 'TestPass123'
+                    })
+                });
+                const data = await response.json();
+                document.getElementById('api-result').innerHTML = `<p>✅ Auth Test: ${data.success ? 'SUCCESS' : 'FAILED'}</p>`;
+            } catch (error) {
+                document.getElementById('api-result').innerHTML = `<p>❌ Auth Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testClaude() {
+            try {
+                const response = await fetch('https://wispix-ai-production.up.railway.app/api/claude/generate-automation', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: 'Send an email every day at 9am'
+                    })
+                });
+                const data = await response.json();
+                document.getElementById('api-result').innerHTML = `<p>✅ Claude Test: ${data.automation ? 'SUCCESS' : 'FAILED'}</p>`;
+            } catch (error) {
+                document.getElementById('api-result').innerHTML = `<p>❌ Claude Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html> 

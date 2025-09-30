@@ -1,0 +1,56 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  automations Automation[]
+  
+  @@map("users")
+}
+
+model Automation {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  name         String
+  description  String?
+  workflowJson Json     @map("workflow_json")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  
+  user       User        @relation(fields: [userId], references: [id])
+  executions Execution[]
+  
+  @@map("automations")
+}
+
+model Execution {
+  id           String    @id @default(uuid())
+  automationId String    @map("automation_id")
+  status       String    @default("pending")
+  startedAt    DateTime  @default(now()) @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  error        String?
+  logs         Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  
+  automation Automation @relation(fields: [automationId], references: [id])
+  
+  @@map("executions")
+}

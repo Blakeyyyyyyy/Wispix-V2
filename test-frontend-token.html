@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Token Test</title>
+</head>
+<body>
+    <h1>Frontend Token Debug Test</h1>
+    <button onclick="testAPI()">Test API Call</button>
+    <button onclick="checkToken()">Check Token</button>
+    <button onclick="setToken()">Set Token</button>
+    <div id="result"></div>
+    
+    <script>
+        const API_BASE = 'http://localhost:3001';
+        const expectedToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ0ZXN0LXVzZXItMTc1MzQwMzAxNjY0MSIsImVtYWlsIjoidGVzdEB3aXNwaXguY29tIiwic3Vic2NyaXB0aW9uVGllciI6InBybyIsImlhdCI6MTc1MzQwMzAxNiwiZXhwIjoxNzU0MDA3ODE2fQ.kaKuTlq0y8RmEErpbdY9K_A7Y1v5dA5Jt6qVHUyGi1M';
+        
+        function checkToken() {
+            const token = localStorage.getItem('token');
+            document.getElementById('result').innerHTML = `
+                <h3>Token Check:</h3>
+                <p><strong>Expected Token:</strong> ${expectedToken.substring(0, 50)}...</p>
+                <p><strong>Actual Token:</strong> ${token ? token.substring(0, 50) + '...' : 'NOT FOUND'}</p>
+                <p><strong>Tokens Match:</strong> ${token === expectedToken ? '✅ YES' : '❌ NO'}</p>
+            `;
+        }
+        
+        function setToken() {
+            localStorage.setItem('token', expectedToken);
+            document.getElementById('result').innerHTML = '<p>✅ Token set successfully!</p>';
+        }
+        
+        async function testAPI() {
+            const token = localStorage.getItem('token');
+            document.getElementById('result').innerHTML = '<p>Testing API call...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/automation/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        message: 'Create an automation that sends an email to my business partner every morning at 8am saying hello'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('result').innerHTML = `
+                        <h3>✅ API Call Successful!</h3>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = `
+                        <h3>❌ API Call Failed!</h3>
+                        <p><strong>Status:</strong> ${response.status}</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>❌ Network Error!</h3>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        // Auto-set token on page load
+        if (!localStorage.getItem('token')) {
+            localStorage.setItem('token', expectedToken);
+        }
+    </script>
+</body>
+</html> 
