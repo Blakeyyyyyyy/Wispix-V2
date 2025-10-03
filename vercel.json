@@ -1,0 +1,57 @@
+{
+  "functions": {
+    "api/agent1.js": {
+      "maxDuration": 800
+    },
+    "api/agent2.js": {
+      "maxDuration": 800
+    },
+    "api/execute-flow.js": {
+      "maxDuration": 800
+    },
+    "api/schedule-automation.js": {
+      "maxDuration": 800
+    },
+    "api/duplicate-automation.js": {
+      "maxDuration": 800
+    },
+    "api/enable-automation.js": {
+      "maxDuration": 800
+    },
+    "api/agent1-response.js": {
+      "maxDuration": 800
+    },
+    "api/agent2-response.ts": {
+      "maxDuration": 800
+    },
+    "api/cleanup-stale-executions.js": {
+      "maxDuration": 30
+    },
+    "api/migrate-execution-thread-ids.js": {
+      "maxDuration": 30
+    },
+    "api/agent-request-credentials.js": {
+      "maxDuration": 30
+    },
+    "api/execute-flow-tool-based.js": {
+      "maxDuration": 800
+    },
+    "api/encrypt-credentials.js": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/process-automations-http",
+      "schedule": "*/1 * * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "regions": ["iad1"],
+  "framework": "vite"
+}

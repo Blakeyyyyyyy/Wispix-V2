@@ -1,0 +1,14 @@
+{
+  "name": "growth-ai-email-manager",
+  "version": "1.0.0",
+  "main": "email-manager-simple.js",
+  "scripts": {
+    "start": "node email-manager-simple.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

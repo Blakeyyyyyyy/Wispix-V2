@@ -1,0 +1,35 @@
+# Railway Production Environment Variables
+# Copy these to Railway dashboard Variables section
+
+# Database (use Railway's PostgreSQL or your Supabase)
+DATABASE_URL="your-production-database-url"
+DIRECT_URL="your-production-direct-database-url"
+
+# Redis (use Railway's Redis)
+REDIS_URL="redis://default:password@host:port"
+
+# OpenAI
+OPENAI_API_KEY="your-openai-key"
+
+# Gmail OAuth (CRITICAL - must be exact same as localhost)
+GMAIL_CLIENT_ID="your-gmail-client-id"
+GMAIL_CLIENT_SECRET="your-gmail-client-secret"
+GMAIL_REFRESH_TOKEN="your-refresh-token"
+GMAIL_REDIRECT_URI="https://developers.google.com/oauthplayground"
+
+# Server
+PORT=3000
+NODE_ENV=production
+
+# Notion (if using)
+DEV_NOTION_TOKEN="your-notion-token"
+DEV_NOTION_DB_ID="2502d71fc0b280c2a5c1fcd72749963f"
+
+# Airtable (if using)
+DEV_AIRTABLE_PAT="your-airtable-pat"
+DEV_AIRTABLE_BASE_ID="your-airtable-base-id"
+
+# Supabase (if using)
+SUPABASE_URL="your-supabase-url"
+SUPABASE_ANON_KEY="your-supabase-anon-key"
+SUPABASE_SERVICE_ROLE_KEY="your-supabase-service-role-key"

@@ -1,0 +1,72 @@
+# Railway Environment Variables Template
+# Copy these to your Railway service environment variables
+
+# ===== REQUIRED CORE VARIABLES =====
+NODE_ENV=production
+PORT=3001
+
+# ===== DATABASE (Railway PostgreSQL) =====
+# These will be automatically set by Railway when you add PostgreSQL service
+DATABASE_URL={{.Postgres.DATABASE_URL}}
+DIRECT_URL={{.Postgres.DIRECT_URL}}
+
+# ===== REDIS (Railway Redis) =====
+# This will be automatically set by Railway when you add Redis service
+REDIS_URL={{.Redis.REDIS_URL}}
+
+# ===== JWT & SECURITY =====
+JWT_SECRET=your-super-secure-jwt-secret-here-min-16-chars
+JWT_EXPIRES_IN=7d
+
+# ===== AI API KEYS =====
+ANTHROPIC_API_KEY=your-anthropic-api-key
+OPENAI_API_KEY=your-openai-api-key
+CLAUDE_MODEL=claude-opus-4-1-20250805
+CLAUDE_PLANNING_MODEL=claude-opus-4-1-20250805
+
+# ===== SUPABASE =====
+SUPABASE_URL=your-supabase-url
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+SUPABASE_ACCESS_TOKEN=your-supabase-access-token
+SUPABASE_PROJECT_REF=your-supabase-project-ref
+SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+
+# ===== NOTION INTEGRATION =====
+DEV_NOTION_TOKEN=your-notion-integration-token
+DEV_NOTION_DB_ID=2502d71fc0b280c2a5c1fcd72749963f
+
+# ===== AIRTABLE INTEGRATION =====
+DEV_AIRTABLE_PAT=your-airtable-personal-access-token
+DEV_AIRTABLE_BASE_ID=your-airtable-base-id
+DEV_AIRTABLE_TABLE=Leads
+
+# ===== GMAIL INTEGRATION =====
+DEV_GMAIL_FROM=your-gmail-address@gmail.com
+DEV_GMAIL_TO=recipient-email@example.com
+GMAIL_CLIENT_ID=your-gmail-client-id
+GMAIL_CLIENT_SECRET=your-gmail-client-secret
+GMAIL_REDIRECT_URI=your-gmail-redirect-uri
+GMAIL_REFRESH_TOKEN=your-gmail-refresh-token
+REPORT_RECIPIENT=your-report-email@example.com
+
+# ===== SMTP CONFIGURATION =====
+SMTP_HOST=your-smtp-host
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-username
+SMTP_PASS=your-smtp-password
+
+# ===== RAILWAY SPECIFIC =====
+# These will be automatically set by Railway
+RAILWAY_PROJECT_ID={{.RAILWAY_PROJECT_ID}}
+RAILWAY_SERVICE_ID={{.RAILWAY_SERVICE_ID}}
+
+# ===== NOTES =====
+# 1. Replace all "your-*" values with actual credentials
+# 2. DATABASE_URL and REDIS_URL are automatically set when you add those services
+# 3. Keep JWT_SECRET secure and unique
+# 4. Test all integrations after deployment
+# 5. ONLY TaskManager and InboxManager will be active - other agents are disabled
+# 6. TaskManager runs every 30 minutes with smart change detection
+# 7. InboxManager runs every 5 minutes for email processing

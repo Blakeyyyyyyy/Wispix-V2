@@ -1,0 +1,5 @@
+# API routes
+/api/request-credentials/* /api/request-credentials/index.html 200
+
+# SPA fallback
+/*    /index.html   200

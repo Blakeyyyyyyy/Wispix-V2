@@ -1,0 +1,16 @@
+# Exclude TypeScript source files from Railway
+src/
+*.ts
+tsconfig.json
+tsconfig.*.json
+
+# Keep only JavaScript files
+!railway-server.js
+!email-processor.js
+
+# Exclude local files
+node_modules/
+.env
+.env.local
+dist/
+dist-runtime/

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webhook Endpoint</title>
+    <script>
+        // Simple webhook endpoint that forwards requests to the main app
+        async function handleCredentialRequest(data) {
+            try {
+                // Post message to parent window (main app)
+                const requestId = Date.now().toString();
+                
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('Request timeout'));
+                    }, 30000);
+
+                    const handleResponse = (event) => {
+                        if (event.data.type === 'credential_response' && event.data.requestId === requestId) {
+                            clearTimeout(timeout);
+                            window.removeEventListener('message', handleResponse);
+                            resolve(event.data.result);
+                        }
+                    };
+
+                    window.addEventListener('message', handleResponse);
+                    
+                    // Send to main app
+                    window.parent.postMessage({
+                        type: 'credential_request',
+                        requestId: requestId,
+                        payload: data
+                    }, '*');
+                });
+            } catch (error) {
+                return {
+                    success: false,
+                    message: error.message
+                };
+            }
+        }
+
+        // Handle POST requests
+        if (window.location.search.includes('webhook=true')) {
+            // This is a webhook request
+            document.addEventListener('DOMContentLoaded', async () => {
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const data = JSON.parse(decodeURIComponent(urlParams.get('data') || '{}'));
+                    
+                    const result = await handleCredentialRequest(data);
+                    
+                    // Return JSON response
+                    document.body.innerHTML = `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+                } catch (error) {
+                    document.body.innerHTML = `<pre>${JSON.stringify({
+                        success: false,
+                        message: error.message
+                    }, null, 2)}</pre>`;
+                }
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>Webhook Endpoint</h1>
+    <p>This endpoint handles credential requests from automation agents.</p>
+</body>
+</html>

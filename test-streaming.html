@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streaming Chat Test - Vibe-inspired Agent Builder</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            color: #ffffff;
+            margin: 0;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+        
+        .header p {
+            color: #9ca3af;
+            font-size: 1.1rem;
+        }
+        
+        .chat-container {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        
+        .messages {
+            min-height: 400px;
+            max-height: 600px;
+            overflow-y: auto;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+        }
+        
+        .message {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .message-user {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.3);
+            margin-left: 2rem;
+        }
+        
+        .message-analyzing {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.3);
+        }
+        
+        .message-planning {
+            background: rgba(139, 92, 246, 0.1);
+            border-color: rgba(139, 92, 246, 0.3);
+        }
+        
+        .message-plan-ready {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+        
+        .message-complete {
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+        
+        .message-error {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+        }
+        
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .message-content {
+            line-height: 1.6;
+        }
+        
+        .plan-preview {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+            font-family: monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .input-field {
+            flex: 1;
+            padding: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+            font-size: 1rem;
+        }
+        
+        .input-field:focus {
+            outline: none;
+            border-color: #3b82f6;
+        }
+        
+        .send-button {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border: none;
+            border-radius: 8px;
+            color: #ffffff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .send-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(59, 130, 246, 0.3);
+        }
+        
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .streaming-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #9ca3af;
+            font-style: italic;
+        }
+        
+        .streaming-dots {
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .streaming-dots span {
+            width: 8px;
+            height: 8px;
+            background: #3b82f6;
+            border-radius: 50%;
+            animation: streaming 1.4s infinite ease-in-out;
+        }
+        
+        .streaming-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .streaming-dots span:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes streaming {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .suggestions {
+            margin-top: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        
+        .suggestion {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            color: #ffffff;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
+        }
+        
+        .suggestion:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 AI Agent Builder</h1>
+            <p>Experience the Vibe-inspired streaming interface for building AI agents</p>
+        </div>
+        
+        <div class="chat-container">
+            <div class="messages" id="messages">
+                <div class="message message-planning">
+                    <div class="message-header">
+                        🤖 AI Assistant
+                    </div>
+                    <div class="message-content">
+                        Hello! I'm here to help you build an AI agent. Describe what you need, and I'll create a detailed plan for you.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="input-container">
+                <input 
+                    type="text" 
+                    class="input-field" 
+                    id="messageInput" 
+                    placeholder="Describe what AI agent you need..."
+                    disabled
+                >
+                <button class="send-button" id="sendButton" disabled>
+                    Send
+                </button>
+            </div>
+            
+            <div class="suggestions">
+                <div class="suggestion" onclick="setMessage('I need an AI agent to manage my email inbox and prioritize messages')">
+                    Email Management Agent
+                </div>
+                <div class="suggestion" onclick="setMessage('Create an AI assistant for customer support automation')">
+                    Customer Support Agent
+                </div>
+                <div class="suggestion" onclick="setMessage('Build an automation agent for lead generation and qualification')">
+                    Lead Generation Agent
+                </div>
+                <div class="suggestion" onclick="setMessage('I need an AI agent to help with project management and task automation')">
+                    Project Management Agent
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        
+        let isStreaming = false;
+        
+        function setMessage(text) {
+            messageInput.value = text;
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+        }
+        
+        function addMessage(type, content, plan = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message message-${type}`;
+            
+            let headerText = '';
+            switch(type) {
+                case 'user': headerText = '👤 You'; break;
+                case 'analyzing': headerText = '🔍 Analyzing'; break;
+                case 'planning': headerText = '📋 Planning'; break;
+                case 'plan-ready': headerText = '✅ Plan Ready'; break;
+                case 'complete': headerText = '🎉 Complete'; break;
+                case 'error': headerText = '❌ Error'; break;
+                default: headerText = '🤖 AI Assistant';
+            }
+            
+            let contentHtml = `<div class="message-header">${headerText}</div><div class="message-content">${content}</div>`;
+            
+            if (plan && type === 'plan-ready') {
+                contentHtml += `<div class="plan-preview">${plan}</div>`;
+            }
+            
+            messageDiv.innerHTML = contentHtml;
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function addStreamingIndicator() {
+            const indicator = document.createElement('div');
+            indicator.className = 'message message-planning';
+            indicator.id = 'streamingIndicator';
+            indicator.innerHTML = `
+                <div class="message-header">🔄 Building</div>
+                <div class="streaming-indicator">
+                    <div class="streaming-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    Building your agent...
+                </div>
+            `;
+            messagesContainer.appendChild(indicator);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+        
+        function removeStreamingIndicator() {
+            const indicator = document.getElementById('streamingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+        
+        async function buildAgent(message) {
+            if (isStreaming) return;
+            
+            isStreaming = true;
+            messageInput.disabled = true;
+            sendButton.disabled = true;
+            
+            // Add user message
+            addMessage('user', message);
+            
+            // Add streaming indicator
+            addStreamingIndicator();
+            
+            try {
+                const response = await fetch('http://localhost:3001/api/build-agent-streaming', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message, sessionId: Date.now() })
+                });
+
+                if (!response.body) {
+                    throw new Error('No response body');
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                
+                                if (data === '[DONE]') {
+                                    isStreaming = false;
+                                    messageInput.disabled = false;
+                                    sendButton.disabled = false;
+                                    removeStreamingIndicator();
+                                    break;
+                                }
+
+                                // Handle different message types
+                                if (data.type === 'analyzing') {
+                                    addMessage('analyzing', data.message);
+                                } else if (data.type === 'planning') {
+                                    addMessage('planning', data.message);
+                                } else if (data.type === 'plan-ready') {
+                                    addMessage('plan-ready', 'Plan ready for your review!', data.plan);
+                                } else if (data.type === 'complete') {
+                                    addMessage('complete', data.message);
+                                } else if (data.type === 'error') {
+                                    addMessage('error', data.message);
+                                }
+                            } catch (parseError) {
+                                console.error('Error parsing streaming data:', parseError);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error building agent:', error);
+                addMessage('error', 'Failed to build agent. Please try again.');
+                isStreaming = false;
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                removeStreamingIndicator();
+            }
+        }
+        
+        function handleSubmit() {
+            const message = messageInput.value.trim();
+            if (message && !isStreaming) {
+                buildAgent(message);
+                messageInput.value = '';
+            }
+        }
+        
+        sendButton.addEventListener('click', handleSubmit);
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleSubmit();
+            }
+        });
+        
+        // Enable input after page loads
+        setTimeout(() => {
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+        }, 1000);
+    </script>
+</body>
+</html>

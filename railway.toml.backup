@@ -1,0 +1,70 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+numReplicas = 1
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+
+[[services]]
+name = "wispix-runtime"
+source = "."
+startCommand = "npm run start:runtime:railway"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+
+[services.env]
+NODE_ENV = "production"
+PORT = "3001"
+
+# Database connection (Railway PostgreSQL)
+DATABASE_URL = "{{.Postgres.DATABASE_URL}}"
+DIRECT_URL = "{{.Postgres.DIRECT_URL}}"
+
+# Redis connection (Railway Redis)
+REDIS_URL = "{{.Redis.REDIS_URL}}"
+
+# JWT and security
+JWT_SECRET = "{{.JWT_SECRET}}"
+JWT_EXPIRES_IN = "7d"
+
+# AI API Keys
+ANTHROPIC_API_KEY = "{{.ANTHROPIC_API_KEY}}"
+OPENAI_API_KEY = "{{.OPENAI_API_KEY}}"
+CLAUDE_MODEL = "claude-opus-4-1-20250805"
+CLAUDE_PLANNING_MODEL = "claude-opus-4-1-20250805"
+
+# Supabase configuration
+SUPABASE_URL = "{{.SUPABASE_URL}}"
+SUPABASE_ANON_KEY = "{{.SUPABASE_ANON_KEY}}"
+SUPABASE_SERVICE_ROLE_KEY = "{{.SUPABASE_SERVICE_ROLE_KEY}}"
+SUPABASE_ACCESS_TOKEN = "{{.SUPABASE_ACCESS_TOKEN}}"
+SUPABASE_PROJECT_REF = "{{.SUPABASE_PROJECT_REF}}"
+SUPABASE_JWT_SECRET = "{{.SUPABASE_JWT_SECRET}}"
+
+# Development credentials (for production automation)
+DEV_NOTION_TOKEN = "{{.DEV_NOTION_TOKEN}}"
+DEV_NOTION_DB_ID = "2502d71fc0b280c2a5c1fcd72749963f"
+DEV_AIRTABLE_PAT = "{{.DEV_AIRTABLE_PAT}}"
+DEV_AIRTABLE_BASE_ID = "{{.DEV_AIRTABLE_BASE_ID}}"
+DEV_AIRTABLE_TABLE = "Leads"
+DEV_GMAIL_FROM = "{{.DEV_GMAIL_FROM}}"
+DEV_GMAIL_TO = "{{.DEV_GMAIL_TO}}"
+GMAIL_CLIENT_ID = "{{.GMAIL_CLIENT_ID}}"
+GMAIL_CLIENT_SECRET = "{{.GMAIL_CLIENT_SECRET}}"
+GMAIL_REDIRECT_URI = "{{.GMAIL_REDIRECT_URI}}"
+GMAIL_REFRESH_TOKEN = "{{.GMAIL_REFRESH_TOKEN}}"
+REPORT_RECIPIENT = "{{.REPORT_RECIPIENT}}"
+
+# SMTP configuration
+SMTP_HOST = "{{.SMTP_HOST}}"
+SMTP_PORT = "{{.SMTP_PORT}}"
+SMTP_SECURE = "{{.SMTP_SECURE}}"
+SMTP_USER = "{{.SMTP_USER}}"
+SMTP_PASS = "{{.SMTP_PASS}}"
+
+# Railway specific
+RAILWAY_PROJECT_ID = "{{.RAILWAY_PROJECT_ID}}"
+RAILWAY_SERVICE_ID = "{{.RAILWAY_SERVICE_ID}}"

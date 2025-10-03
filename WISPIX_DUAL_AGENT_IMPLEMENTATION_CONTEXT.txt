@@ -1,0 +1,607 @@
+# 🚀 WISPIX DUAL-AGENT SYSTEM IMPLEMENTATION CONTEXT & PLAN
+
+## 📋 EXECUTIVE SUMMARY
+
+This document provides a comprehensive analysis of the current Wispix platform and a detailed implementation plan for integrating the new Dual-Agent Tool-Based Automation System. The new system will enhance the existing Agent 1 (Discovery) + Agent 2 (Execution) architecture with a sophisticated tool library and credential management system.
+
+---
+
+## 🔍 CURRENT PLATFORM ANALYSIS
+
+### **🏗️ EXISTING ARCHITECTURE**
+
+The Wispix platform currently operates with **TWO PARALLEL SYSTEMS**:
+
+#### **System 1: Supabase-Based Dual-Agent System (ACTIVE)**
+- **Frontend**: React + TypeScript + Vite + Tailwind (`/src/`)
+- **Database**: Supabase PostgreSQL with real-time subscriptions
+- **Agent 1**: External N8N webhook (`novusautomations.net/webhook/f49d3bf6-9601-4c30-8921-abe3fba7d661`)
+- **Agent 2**: External N8N webhook (`novusautomations.net/webhook/a13a060a-62be-4ae8-a1f3-6503d23032bb`)
+- **Execution**: Vercel Cron job (`/api/cron/process-automations-http.js`) runs every minute
+- **Status**: ✅ **PRODUCTION ACTIVE** with paying customers
+
+#### **System 2: Railway-Based 3-Agent System (LEGACY)**
+- **Backend**: Railway deployment (`/backend-new/`)
+- **Database**: Prisma + PostgreSQL
+- **Agents**: Requirements → Builder → Validator (Claude Sonnet 4)
+- **Status**: ⚠️ **EXISTS BUT NOT ACTIVELY USED**
+
+### **🗄️ CURRENT DATABASE SCHEMA**
+
+#### **Supabase Tables (ACTIVE SYSTEM)**
+```sql
+-- Main automation projects
+automation_threads (
+  id, user_id, name, automation_id, enabled, created_at, updated_at
+)
+
+-- User ↔ Agent 1 conversations
+chat_messages (
+  id, thread_id, user_id, content, sender_type, created_at
+)
+
+-- Agent 2 execution logs
+activity_logs (
+  id, thread_id, user_id, content, sender_type, created_at
+)
+
+-- Execution tracking
+flow_executions (
+  id, thread_id, execution_thread_id, automation_id, user_id,
+  status, steps, project_context, current_step, total_steps,
+  results, started_at, completed_at, error_message,
+  schedule_id, scheduled_for, cron_expression, next_scheduled_run,
+  is_scheduled, created_at, updated_at
+)
+
+-- Service credentials (UNENCRYPTED JSONB)
+user_credentials (
+  id, user_id, service_name, credentials, created_at, updated_at
+)
+```
+
+#### **Prisma Schema (LEGACY SYSTEM)**
+```sql
+-- Railway backend tables
+User, Automation, Execution, ExecutionStep, ApiDoc, ApiChunk, DraftPlan, GmailTokens
+```
+
+### **🔐 CURRENT CREDENTIAL MANAGEMENT**
+
+**CRITICAL FINDING**: The platform has **MULTIPLE CREDENTIAL SYSTEMS**:
+
+1. **Supabase `user_credentials` table**: Stores credentials as **UNENCRYPTED JSONB**
+2. **Frontend encryption system**: `/frontend/src/lib/credentials.ts` with encrypt/decrypt
+3. **Backend global store**: `/backend/server.js` with Map-based storage
+4. **Multiple credential forms**: Different components handle different credential types
+
+**SECURITY CONCERN**: Credentials are stored unencrypted in production Supabase database.
+
+---
+
+## 🎯 NEW SYSTEM INTEGRATION STRATEGY
+
+### **📊 INTEGRATION APPROACH**
+
+**PRIMARY STRATEGY**: Enhance the **ACTIVE Supabase-based system** with tool library capabilities while maintaining backward compatibility.
+
+**KEY PRINCIPLES**:
+1. **Preserve existing functionality** - Don't break current automations
+2. **Enhance Agent 1** with tool discovery capabilities
+3. **Enhance Agent 2** with credential injection system
+4. **Maintain external webhook architecture** - Keep N8N integration
+5. **Add tool library as new capability** - Not replacement
+
+### **🔄 ENHANCED FLOW ARCHITECTURE**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  ENHANCED DUAL-AGENT SYSTEM                             │
+├─────────────────────────────────────────────────────────┤
+│  USER INPUT: "Send daily report at 9 AM"                │
+│  ↓                                                      │
+│  AGENT 1 (Discovery) - ENHANCED                         │
+│  ├─ search_tools() → Find relevant tools                │
+│  ├─ check_credentials() → Verify user has access        │
+│  ├─ request_credentials() → Get missing credentials    │
+│  ├─ create_execution_plan() → Build tool-based plan    │
+│  └─ Return: FlowChange + Tool-based steps              │
+│  ↓                                                      │
+│  FRONTEND: Auto-populate FlowMapping with tool steps   │
+│  ↓                                                      │
+│  USER: Reviews/edits → Clicks "Execute"                │
+│  ↓                                                      │
+│  CRON JOB: /api/cron/process-automations-http.js       │
+│  ├─ For each step:                                      │
+│  │  ├─ Fetch tool definition from tool_definitions     │
+│  │  ├─ Inject credentials at runtime                   │
+│  │  ├─ Execute HTTP request                            │
+│  │  └─ Store result in thread memory                   │
+│  └─ Update execution status                            │
+│  ↓                                                      │
+│  REAL-TIME: Supabase subscriptions update UI           │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🗄️ DATABASE SCHEMA CHANGES
+
+### **NEW TABLES TO ADD**
+
+#### **1. Tool Definitions Table**
+```sql
+CREATE TABLE tool_definitions (
+  id TEXT PRIMARY KEY,                    -- e.g., "tool_airtable_delete_v1"
+  platform TEXT NOT NULL,                 -- "airtable", "slack", "gmail", "stripe"
+  action TEXT NOT NULL,                   -- "delete_record", "send_message", "list_records"
+  display_name TEXT NOT NULL,             -- "Delete Airtable Record"
+  description TEXT NOT NULL,              -- Full description for search
+  
+  -- What the LLM sees (NO credentials)
+  function_definition JSONB NOT NULL,     -- OpenAI/Anthropic tool spec
+  
+  -- What your code uses (credential placeholders)
+  http_template JSONB NOT NULL,           -- {method, url, headers, body}
+  
+  credentials_needed TEXT[],              -- ["airtable_pat"]
+  tested BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_platform_action ON tool_definitions(platform, action);
+CREATE INDEX idx_description_search ON tool_definitions USING GIN(to_tsvector('english', description));
+```
+
+#### **2. Execution Plans Table**
+```sql
+CREATE TABLE execution_plans (
+  id TEXT PRIMARY KEY,
+  automation_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  steps JSONB NOT NULL,                   -- Array of {instruction, tool_id, context}
+  status TEXT DEFAULT 'ready_to_execute', -- 'ready_to_execute', 'executing', 'completed', 'failed'
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_execution_plans_automation ON execution_plans(automation_id);
+CREATE INDEX idx_execution_plans_user ON execution_plans(user_id);
+```
+
+#### **3. Thread Memory Table**
+```sql
+CREATE TABLE thread_memory (
+  id TEXT PRIMARY KEY,
+  automation_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  step_number INTEGER NOT NULL,
+  content JSONB NOT NULL,                -- Step output data
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_thread_memory_automation ON thread_memory(automation_id);
+CREATE INDEX idx_thread_memory_step ON thread_memory(automation_id, step_number);
+```
+
+### **EXISTING TABLE MODIFICATIONS**
+
+#### **Enhanced user_credentials Table**
+```sql
+-- Add new columns to existing table
+ALTER TABLE user_credentials ADD COLUMN platform TEXT;
+ALTER TABLE user_credentials ADD COLUMN credential_type TEXT;
+ALTER TABLE user_credentials ADD COLUMN encrypted BOOLEAN DEFAULT false;
+
+-- Create new index
+CREATE INDEX idx_user_credentials_platform ON user_credentials(user_id, platform);
+```
+
+---
+
+## 🔧 IMPLEMENTATION PLAN
+
+### **PHASE 1: DATABASE SETUP (Day 1)**
+
+#### **1.1 Create Migration Files**
+- Create Supabase migration for new tables
+- Add indexes for performance
+- Seed initial tool definitions (20-30 tools)
+
+#### **1.2 Tool Library Seeding**
+```typescript
+// Initial tools to seed
+const initialTools = [
+  // Airtable (5 tools)
+  { id: "tool_airtable_list_v1", platform: "airtable", action: "list_records" },
+  { id: "tool_airtable_get_v1", platform: "airtable", action: "get_record" },
+  { id: "tool_airtable_create_v1", platform: "airtable", action: "create_record" },
+  { id: "tool_airtable_update_v1", platform: "airtable", action: "update_record" },
+  { id: "tool_airtable_delete_v1", platform: "airtable", action: "delete_record" },
+  
+  // Slack (5 tools)
+  { id: "tool_slack_send_v1", platform: "slack", action: "send_message" },
+  { id: "tool_slack_channels_v1", platform: "slack", action: "list_channels" },
+  { id: "tool_slack_file_v1", platform: "slack", action: "post_file" },
+  
+  // Gmail (5 tools)
+  { id: "tool_gmail_send_v1", platform: "gmail", action: "send_email" },
+  { id: "tool_gmail_list_v1", platform: "gmail", action: "list_messages" },
+  { id: "tool_gmail_read_v1", platform: "gmail", action: "read_message" },
+  
+  // Stripe (5 tools)
+  { id: "tool_stripe_customer_v1", platform: "stripe", action: "create_customer" },
+  { id: "tool_stripe_charge_v1", platform: "stripe", action: "create_charge" },
+  { id: "tool_stripe_invoice_v1", platform: "stripe", action: "list_invoices" },
+  
+  // OpenAI (5 tools)
+  { id: "tool_openai_completion_v1", platform: "openai", action: "create_completion" },
+  { id: "tool_openai_embedding_v1", platform: "openai", action: "create_embedding" }
+];
+```
+
+### **PHASE 2: AGENT 1 ENHANCEMENT (Day 2-3)**
+
+#### **2.1 New Agent 1 Tools**
+Enhance `/api/agent1.js` with new tool capabilities:
+
+```typescript
+// New tools for Agent 1
+const agent1Tools = [
+  {
+    name: "search_tools",
+    description: "Search the tool library for API operations by platform and action",
+    parameters: {
+      platform: { type: "string", enum: ["airtable", "slack", "gmail", "stripe", "openai"] },
+      query: { type: "string", description: "What action you want to perform" }
+    }
+  },
+  {
+    name: "check_credentials",
+    description: "Check which credentials are missing for a platform",
+    parameters: {
+      platform: { type: "string" },
+      required_fields: { type: "array", items: { type: "string" } }
+    }
+  },
+  {
+    name: "request_credentials",
+    description: "Request missing credentials from user via secure popup",
+    parameters: {
+      platform: { type: "string" },
+      fields: { type: "array", items: { type: "string" } }
+    }
+  },
+  {
+    name: "create_execution_plan",
+    description: "Create an execution plan for Agent 2 to execute",
+    parameters: {
+      steps: { type: "array", items: { type: "object" } }
+    }
+  }
+];
+```
+
+#### **2.2 Enhanced Agent 1 System Prompt**
+```typescript
+const AGENT_1_SYSTEM_PROMPT = `
+You are a discovery agent that helps users build automations. Your job:
+
+1. Understand what the user wants to automate
+2. Search for the right tools using search_tools()
+3. Check if credentials exist using check_credentials()
+4. Request ONLY missing credentials using request_credentials()
+5. Collect any additional parameters (IDs, names, etc.) from the user
+6. Create an execution plan using create_execution_plan()
+
+CREDENTIAL FLOW:
+- ALWAYS check credentials BEFORE asking user for anything
+- ONLY request credentials that are missing
+- If user has airtable_pat already stored, don't ask for it again
+
+EXECUTION PLAN FORMAT:
+Each step should have:
+- instruction: Natural language description of what to do
+- tool_id: The exact tool ID from search results
+- context: Pre-filled parameters you've collected (baseId, tableId, etc.)
+
+Agent 2 will receive these steps and use thread memory to pass data between steps.
+`;
+```
+
+### **PHASE 3: AGENT 2 ENHANCEMENT (Day 4-5)**
+
+#### **3.1 Create Agent2Executor Class**
+```typescript
+// New file: /src/lib/agents/Agent2Executor.ts
+class Agent2Executor {
+  constructor(
+    private supabase: SupabaseClient,
+    private threadMemory: MemoryManager
+  ) {}
+
+  async executeStep(input: {
+    executionId: string;
+    automationId: string;
+    userId: string;
+    step: Step;
+  }) {
+    // 1. Fetch tool definition (NOT in LLM context yet)
+    const toolDef = await this.fetchToolDefinition(step.tool_id);
+    
+    // 2. Load thread memory for this automation
+    const threadMessages = await this.threadMemory.getMessages(automationId);
+    
+    // 3. Call LLM with ONLY function_definition (no credentials)
+    const response = await this.callLLM(step.instruction, toolDef.function_definition);
+    
+    // 4. If LLM called the tool, execute with credential injection
+    if (response.toolCalls?.[0]) {
+      const result = await this.executeHttpRequest(
+        toolDef,
+        response.toolCalls[0].args,
+        userId
+      );
+      
+      // 5. Store result in thread memory
+      await this.threadMemory.addMessage(automationId, {
+        step_number: step.step_number,
+        content: result.summary
+      });
+      
+      return result;
+    }
+  }
+  
+  private async executeHttpRequest(
+    toolDef: ToolDefinition,
+    params: any,
+    userId: string
+  ) {
+    // CRITICAL: Credentials injected here, NEVER in LLM context
+    
+    // 1. Fetch credentials
+    const credentials = await this.fetchCredentials(userId, toolDef.platform);
+    
+    // 2. Build HTTP request with credential injection
+    const url = this.interpolate(toolDef.http_template.url, params);
+    const headers = this.injectCredentials(
+      toolDef.http_template.headers,
+      credentials
+    );
+    
+    // 3. Execute request
+    const response = await fetch(url, {
+      method: toolDef.http_template.method,
+      headers: headers,
+      body: toolDef.http_template.body ? JSON.stringify(params) : undefined
+    });
+    
+    // 4. Handle errors and return sanitized result
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return {
+      success: true,
+      summary: this.summarizeResult(data),
+      data: this.sanitize(data) // Remove sensitive fields
+    };
+  }
+}
+```
+
+#### **3.2 Enhanced Cron Job**
+Modify `/api/cron/process-automations-http.js`:
+
+```typescript
+// Enhanced step processing
+async function processExecutionHTTP(execution) {
+  const executor = new Agent2Executor(supabase, memoryManager);
+  
+  for (let i = 0; i < execution.steps.length; i++) {
+    const step = execution.steps[i];
+    
+    // Check if step has tool_id (new format) or content (legacy format)
+    if (step.tool_id) {
+      // New tool-based execution
+      const result = await executor.executeStep({
+        executionId: execution.id,
+        automationId: execution.automation_id,
+        userId: execution.user_id,
+        step: step
+      });
+    } else {
+      // Legacy execution (maintain backward compatibility)
+      await callAgentWithHTTP(webhookPayload, i + 1);
+    }
+  }
+}
+```
+
+### **PHASE 4: FRONTEND INTEGRATION (Day 6-7)**
+
+#### **4.1 Enhanced Credential Management**
+```typescript
+// Modify /src/components/CredentialForm.tsx
+const handleCredentialSubmit = async (credentials) => {
+  // Store with encryption
+  const encrypted = encrypt(JSON.stringify(credentials));
+  
+  await supabase.from('user_credentials').upsert({
+    user_id: userId,
+    platform: credentialPopup.platform,
+    credentials: { encrypted },
+    encrypted: true
+  });
+  
+  // Notify Agent 1
+  await sendMessage("Credentials saved, please continue");
+  setCredentialPopup(null);
+};
+```
+
+#### **4.2 Enhanced FlowMapping Component**
+```typescript
+// Modify /src/components/FlowMapping.tsx
+const executeAutomation = async () => {
+  // Check if steps have tool_id (new format)
+  const hasToolSteps = steps.some(step => step.tool_id);
+  
+  if (hasToolSteps) {
+    // New tool-based execution
+    const response = await fetch('/api/execute-flow-tool-based', {
+      method: 'POST',
+      body: JSON.stringify({
+        executionId,
+        threadId: thread.id,
+        automationId: thread.automation_id,
+        userId: user.id,
+        steps: steps,
+        projectContext: projectContext
+      })
+    });
+  } else {
+    // Legacy execution (maintain backward compatibility)
+    const response = await fetch('/api/execute-flow', {
+      method: 'POST',
+      body: JSON.stringify({
+        executionId,
+        threadId: thread.id,
+        automationId: thread.automation_id,
+        userId: user.id,
+        steps: steps,
+        projectContext: projectContext
+      })
+    });
+  }
+};
+```
+
+### **PHASE 5: TESTING & VALIDATION (Day 8)**
+
+#### **5.1 Test Scenarios**
+1. **Tool Discovery**: Agent 1 finds relevant tools
+2. **Credential Flow**: Missing credentials requested and stored
+3. **Tool Execution**: Agent 2 executes with credential injection
+4. **Data Passing**: Thread memory passes data between steps
+5. **Error Handling**: API failures handled gracefully
+6. **Backward Compatibility**: Legacy automations still work
+
+#### **5.2 Security Validation**
+1. **Credential Isolation**: Verify credentials never reach LLM context
+2. **Response Sanitization**: Ensure sensitive data removed from responses
+3. **Access Control**: Verify users only access their own credentials
+4. **Encryption**: Confirm credentials stored encrypted
+
+---
+
+## ⚠️ CRITICAL CONSIDERATIONS
+
+### **🔒 SECURITY REQUIREMENTS**
+
+#### **NEVER DO:**
+- Send credentials to LLM context
+- Log credentials in plain text
+- Store credentials in tool definitions
+- Return credentials in API responses
+
+#### **ALWAYS DO:**
+- Inject credentials at HTTP execution time only
+- Sanitize API responses before returning to LLM
+- Use `__CREDENTIAL:key__` placeholders in templates
+- Validate tool parameters before execution
+
+### **🔄 BACKWARD COMPATIBILITY**
+
+#### **Maintain Existing Functionality:**
+- Current Agent 1 + Agent 2 webhook system continues working
+- Existing automations execute without modification
+- Current credential storage system remains functional
+- Real-time subscriptions continue working
+
+#### **Gradual Migration:**
+- New automations use tool-based system
+- Legacy automations continue using webhook system
+- Users can upgrade automations to tool-based when ready
+
+### **📊 PERFORMANCE CONSIDERATIONS**
+
+#### **Database Optimization:**
+- Index tool_definitions for fast searching
+- Cache frequently used tool definitions
+- Optimize thread memory queries
+
+#### **Execution Optimization:**
+- Parallel step execution where possible
+- Efficient credential caching
+- Minimal LLM context (only function definitions)
+
+---
+
+## 🎯 SUCCESS METRICS
+
+### **Functional Requirements:**
+- ✅ Agent 1 can search and find tools
+- ✅ Agent 1 checks credentials before asking
+- ✅ Agent 1 only requests missing credentials
+- ✅ Credential popup works and stores correctly
+- ✅ Agent 2 fetches tool definitions correctly
+- ✅ Agent 2 injects credentials without LLM exposure
+- ✅ Agent 2 passes data between steps via thread memory
+- ✅ Error flow notifies Agent 1 correctly
+- ✅ Full automation completes successfully
+- ✅ Scheduled automations execute on time
+
+### **Security Requirements:**
+- ✅ Credentials never exposed to LLM
+- ✅ All credentials encrypted at rest
+- ✅ API responses sanitized
+- ✅ Access control enforced
+
+### **Performance Requirements:**
+- ✅ Tool search completes in <500ms
+- ✅ Credential injection adds <100ms overhead
+- ✅ Thread memory queries optimized
+- ✅ Database indexes effective
+
+---
+
+## 🚀 IMPLEMENTATION READINESS
+
+### **✅ READY TO START:**
+- Database schema designed
+- Integration strategy defined
+- Security model established
+- Backward compatibility ensured
+- Testing plan created
+
+### **📋 NEXT STEPS:**
+1. **Confirm approach** with user
+2. **Start Phase 1** (Database setup)
+3. **Implement incrementally** with testing at each phase
+4. **Maintain production stability** throughout implementation
+
+---
+
+## ❓ CLARIFICATION QUESTIONS
+
+Before proceeding with implementation, I need clarification on:
+
+1. **Tool Library Scope**: Should we start with the 20-30 initial tools, or do you have specific platforms/tools in mind?
+
+2. **Credential Encryption**: Should we implement the encryption system immediately, or can we start with the current unencrypted system and upgrade later?
+
+3. **Migration Strategy**: Do you want to migrate existing automations to the tool-based system, or keep them as legacy?
+
+4. **Testing Environment**: Should we implement this in a staging environment first, or directly in production?
+
+5. **Agent 1 Enhancement**: Should we enhance the existing N8N Agent 1 webhook, or create a new internal Agent 1 system?
+
+6. **Tool Definition Format**: Do you have preferences for the tool definition structure, or should I use the proposed format?
+
+---
+
+**This implementation will significantly enhance the Wispix platform while maintaining all existing functionality and ensuring production stability.**
